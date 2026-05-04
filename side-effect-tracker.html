@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="副作用记录">
+<meta name="theme-color" content="#FFF8F0">
+<title>副作用记录</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #FFF8F0;
+  --card: #FFFFFF;
+  --primary: #E8951A;
+  --primary-light: #F7C873;
+  --primary-pale: #FFF3E0;
+  --accent: #F08379;
+  --text: #4A3728;
+  --text-light: #8B7355;
+  --text-lighter: #B8A898;
+  --border: #F0E6DA;
+  --shadow: 0 2px 12px rgba(74,55,40,0.08);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: 80px;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Page transition */
+.page { display: none; padding: 20px 16px; }
+.page.active { display: block; animation: fadeIn 0.25s ease; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Header */
+.header {
+  text-align: center;
+  padding: 16px 0 8px;
+}
+.header h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
+.header .date { font-size: 13px; color: var(--text-light); margin-top: 4px; }
+
+/* Cards */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Quick action buttons on home */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.quick-btn {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 12px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: var(--shadow);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.quick-btn:active {
+  transform: scale(0.96);
+  background: var(--primary-pale);
+  border-color: var(--primary-light);
+}
+
+.quick-btn .icon { font-size: 32px; line-height: 1; }
+.quick-btn .label { font-size: 14px; }
+.quick-btn.diarrhea { border-left: 4px solid #E8951A; }
+.quick-btn.pain { border-left: 4px solid #F08379; }
+.quick-btn.nausea { border-left: 4px solid #C9A96E; }
+.quick-btn.fatigue { border-left: 4px solid #B8B0A0; }
+.quick-btn.loperamide { border-left: 4px solid #8FC9A9; }
+.quick-btn.medication { border-left: 4px solid #A0B8D0; }
+
+/* Today summary */
+.today-stats {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.today-stat {
+  flex: 0 0 auto;
+  min-width: 72px;
+  text-align: center;
+  padding: 12px 10px;
+  background: var(--primary-pale);
+  border-radius: var(--radius-sm);
+}
+.today-stat .num { font-size: 28px; font-weight: 700; color: var(--primary); }
+.today-stat .label { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+
+/* Record modal / sheet */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(74,55,40,0.35);
+  z-index: 100;
+  animation: fadeIn 0.2s;
+}
+.modal-overlay.show { display: flex; align-items: flex-end; justify-content: center; }
+
+.modal-sheet {
+  background: var(--card);
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 24px 20px 32px;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.modal-sheet h3 {
+  font-size: 18px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.modal-sheet .close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-light);
+}
+
+/* Form elements */
+.form-group { margin-bottom: 16px; }
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-light);
+  margin-bottom: 6px;
+}
+
+.option-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.option-btn {
+  flex: 1;
+  min-width: 80px;
+  padding: 12px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  text-align: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text);
+}
+
+.option-btn.selected {
+  background: var(--primary-pale);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+input[type="number"], input[type="datetime-local"], input[type="date"], textarea, select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  -webkit-appearance: none;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #FFFBF5;
+}
+
+/* Pain score quick select */
+.pain-scores {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pain-score {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--card);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+.pain-score.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  transform: scale(1.1);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 24px;
+  border-radius: 25px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.btn:active { transform: scale(0.96); }
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  width: 100%;
+}
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 20px;
+}
+
+.btn-danger {
+  background: #FEE;
+  color: #D44;
+}
+
+/* Bottom nav */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 50;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--text-lighter);
+  cursor: pointer;
+  padding: 4px 16px;
+  transition: color 0.2s;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+.nav-item .nav-icon { font-size: 22px; line-height: 1; }
+.nav-item.active { color: var(--primary); font-weight: 600; }
+
+/* History list */
+.history-date-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-light);
+  padding: 12px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--card);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  box-shadow: 0 1px 4px rgba(74,55,40,0.04);
+}
+
+.history-item .time { font-size: 13px; color: var(--text-light); min-width: 48px; }
+.history-item .type-icon { font-size: 22px; width: 32px; text-align: center; }
+.history-item .detail { flex: 1; font-size: 14px; }
+.history-item .detail .sub { font-size: 12px; color: var(--text-lighter); }
+.history-item .delete-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px;
+  color: var(--text-lighter);
+  opacity: 0.5;
+}
+.history-item .retro-badge {
+  font-size: 10px;
+  background: var(--border);
+  color: var(--text-lighter);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.filter-chip {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--text-light);
+}
+.filter-chip.active {
+  background: var(--primary-pale);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Chart container */
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  margin-bottom: 20px;
+}
+.chart-wrap canvas { width: 100% !important; }
+
+/* Phase management */
+.phase-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.phase-item .phase-info { flex: 1; }
+.phase-item .phase-days { font-size: 13px; color: var(--text-light); }
+.phase-item.current {
+  border: 2px solid var(--primary);
+  background: var(--primary-pale);
+}
+
+/* Weekly summary */
+.weekly-card {
+  background: linear-gradient(135deg, #FFF8F0 0%, #FFF3E0 50%, #FFEEE0 100%);
+  border: 1.5px solid #F5D5A0;
+}
+.weekly-text {
+  font-size: 15px;
+  line-height: 2.2;
+  color: var(--text);
+  letter-spacing: 0.3px;
+}
+.weekly-text .highlight { color: var(--primary); font-weight: 600; }
+.weekly-text .warm { color: var(--accent); }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-lighter);
+  font-size: 14px;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 20px;
+  font-size: 14px;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* Retrospective toggle */
+.retro-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-light);
+  margin-bottom: 12px;
+}
+.retro-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+/* Responsive */
+@media (min-width: 480px) {
+  .quick-actions { grid-template-columns: repeat(3, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- ====== Page: Home ====== -->
+<div class="page active" id="page-home">
+  <div class="header">
+    <h1>🌿 副作用记录</h1>
+    <div class="date" id="header-date"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 今日概览</div>
+    <div class="today-stats" id="today-stats">
+      <div class="today-stat"><div class="num" id="stat-diarrhea">0</div><div class="label">腹泻</div></div>
+      <div class="today-stat"><div class="num" id="stat-loperamide">0</div><div class="label">易蒙停</div></div>
+      <div class="today-stat"><div class="num" id="stat-pain">-</div><div class="label">腹痛峰值</div></div>
+      <div class="today-stat"><div class="num" id="stat-nausea">0</div><div class="label">恶心</div></div>
+      <div class="today-stat"><div class="num" id="stat-fatigue">0</div><div class="label">乏力</div></div>
+      <div class="today-stat"><div class="num" id="stat-phase">-</div><div class="label" id="stat-phase-label">当前剂量</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚡ 快速记录</div>
+    <div class="quick-actions">
+      <button class="quick-btn diarrhea" onclick="openRecord('diarrhea')">
+        <span class="icon">🚽</span><span class="label">腹泻</span>
+      </button>
+      <button class="quick-btn pain" onclick="openRecord('pain')">
+        <span class="icon">😣</span><span class="label">腹痛</span>
+      </button>
+      <button class="quick-btn nausea" onclick="openRecord('nausea')">
+        <span class="icon">🤢</span><span class="label">恶心</span>
+      </button>
+      <button class="quick-btn fatigue" onclick="openRecord('fatigue')">
+        <span class="icon">😴</span><span class="label">乏力</span>
+      </button>
+      <button class="quick-btn loperamide" onclick="openRecord('loperamide')">
+        <span class="icon">💊</span><span class="label">易蒙停</span>
+      </button>
+      <button class="quick-btn medication" onclick="openRecord('medication')">
+        <span class="icon">💉</span><span class="label">服用奈拉替尼</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Page: History ====== -->
+<div class="page" id="page-history">
+  <div class="header"><h1>📋 历史记录</h1></div>
+  <div class="filter-bar" id="filter-bar">
+    <button class="filter-chip active" onclick="setFilter('all', this)">全部</button>
+    <button class="filter-chip" onclick="setFilter('diarrhea', this)">🚽 腹泻</button>
+    <button class="filter-chip" onclick="setFilter('pain', this)">😣 腹痛</button>
+    <button class="filter-chip" onclick="setFilter('nausea', this)">🤢 恶心</button>
+    <button class="filter-chip" onclick="setFilter('fatigue', this)">😴 乏力</button>
+    <button class="filter-chip" onclick="setFilter('loperamide', this)">💊 易蒙停</button>
+    <button class="filter-chip" onclick="setFilter('medication', this)">💉 服药</button>
+  </div>
+  <div id="history-list"></div>
+</div>
+
+<!-- ====== Page: Trends ====== -->
+<div class="page" id="page-trends">
+  <div class="header"><h1>📈 趋势分析</h1></div>
+
+  <div class="card weekly-card" id="weekly-summary-card">
+    <div class="card-title">📝 每周小结</div>
+    <div id="weekly-summary-text" class="weekly-text"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">腹泻次数趋势（近30天）</div>
+    <div class="chart-wrap"><canvas id="chart-diarrhea"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">每日腹痛峰值</div>
+    <div class="chart-wrap"><canvas id="chart-pain"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">腹泻 vs 易蒙停 用量对比</div>
+    <div class="chart-wrap"><canvas id="chart-comparison"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">恶心 & 乏力发生次数</div>
+    <div class="chart-wrap"><canvas id="chart-other"></canvas></div>
+  </div>
+</div>
+
+<!-- ====== Page: Settings ====== -->
+<div class="page" id="page-settings">
+  <div class="header"><h1>⚙️ 设置</h1></div>
+
+  <div class="card">
+    <div class="card-title">💊 奈拉替尼剂量阶段</div>
+    <div id="phase-list"></div>
+    <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="addPhase()">+ 添加新阶段</button>
+    <p style="font-size:12px;color:var(--text-lighter);margin-top:8px">例如：3粒/天 → 4粒/天 → 5粒/天 → 6粒/天。切换阶段后自动统计上一个阶段持续天数。</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📱 添加到 iPhone 主屏幕</div>
+    <div style="font-size:13px;color:var(--text-light);line-height:1.8">
+      1. 在 <strong>Safari</strong> 浏览器中打开本页面<br>
+      2. 点击底部中间的 <strong>分享按钮</strong>（↑）<br>
+      3. 滑动找到并点击 <strong>「添加到主屏幕」</strong><br>
+      4. 点击右上角「添加」即可<br>
+      <span style="color:var(--text-lighter)">添加后可以像 App 一样从桌面直接打开</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📤 数据管理</div>
+    <button class="btn btn-secondary" style="width:100%;margin-bottom:8px" onclick="exportCSV()">导出为 CSV（可用 Excel 打开）</button>
+    <button class="btn btn-secondary" style="width:100%;margin-bottom:8px" onclick="exportJSON()">导出完整备份 (JSON)</button>
+    <button class="btn btn-secondary" style="width:100%;margin-bottom:8px" onclick="document.getElementById('import-file').click()">导入备份数据</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)">
+    <button class="btn btn-danger" style="width:100%" onclick="clearData()">清除所有数据</button>
+  </div>
+</div>
+
+<!-- ====== Bottom Navigation ====== -->
+<nav class="bottom-nav">
+  <button class="nav-item active" data-page="home" onclick="switchPage('home', this)">
+    <span class="nav-icon">🏠</span>首页
+  </button>
+  <button class="nav-item" data-page="history" onclick="switchPage('history', this)">
+    <span class="nav-icon">📋</span>历史
+  </button>
+  <button class="nav-item" data-page="trends" onclick="switchPage('trends', this)">
+    <span class="nav-icon">📈</span>趋势
+  </button>
+  <button class="nav-item" data-page="settings" onclick="switchPage('settings', this)">
+    <span class="nav-icon">⚙️</span>设置
+  </button>
+</nav>
+
+<!-- ====== Record Modal ====== -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal-sheet" id="modal-sheet"></div>
+</div>
+
+<script>
+// ==================== DATA LAYER ====================
+const STORAGE_KEY = 'se_tracker_data';
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { records: [], phases: [] };
+    return JSON.parse(raw);
+  } catch(e) { return { records: [], phases: [] }; }
+}
+
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function addRecord(record) {
+  const data = loadData();
+  record.id = Date.now();
+  record.createdAt = new Date().toISOString();
+
+  // Auto-assign diarrhea count: count existing records on the same actual day + 1
+  if (record.type === 'diarrhea') {
+    const actualDate = new Date(record.actualTime || record.createdAt).toDateString();
+    const sameDayCount = data.records.filter(r =>
+      r.type === 'diarrhea' &&
+      new Date(r.actualTime || r.createdAt).toDateString() === actualDate
+    ).length;
+    record.diarrheaCount = sameDayCount + 1;
+  }
+
+  data.records.push(record);
+  saveData(data);
+  return record;
+}
+
+function deleteRecord(id) {
+  const data = loadData();
+  data.records = data.records.filter(r => r.id !== id);
+  saveData(data);
+}
+
+function updateRecord(id, updates) {
+  const data = loadData();
+  const idx = data.records.findIndex(r => r.id === id);
+  if (idx >= 0) {
+    Object.assign(data.records[idx], updates);
+  }
+  saveData(data);
+}
+
+// ==================== UI HELPERS ====================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function fmtTime(iso) { return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
+function fmtDate(iso) { return new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }); }
+function fmtFull(iso) { return new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) + ' ' + fmtTime(iso); }
+
+function getTodayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// ==================== NAVIGATION ====================
+function switchPage(pageName, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + pageName).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  if (pageName === 'home') renderHome();
+  if (pageName === 'history') renderHistory();
+  if (pageName === 'trends') setTimeout(renderTrends, 100);
+  if (pageName === 'settings') renderSettings();
+  window.scrollTo(0, 0);
+}
+
+// ==================== HOME PAGE ====================
+function renderHome() {
+  document.getElementById('header-date').textContent = new Date().toLocaleDateString('zh-CN', {
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'
+  });
+
+  const data = loadData();
+  const today = new Date().toDateString();
+
+  const todayRecords = data.records.filter(r =>
+    new Date(r.actualTime || r.createdAt).toDateString() === today
+  );
+
+  const diarrhea = todayRecords.filter(r => r.type === 'diarrhea').length;
+  const loperamide = todayRecords.filter(r => r.type === 'loperamide').length;
+  const pains = todayRecords.filter(r => r.type === 'pain').map(r => r.painScore);
+  const nausea = todayRecords.filter(r => r.type === 'nausea').length;
+  const fatigue = todayRecords.filter(r => r.type === 'fatigue').length;
+
+  document.getElementById('stat-diarrhea').textContent = diarrhea;
+  document.getElementById('stat-loperamide').textContent = loperamide;
+  document.getElementById('stat-pain').textContent = pains.length ? Math.max(...pains) : '-';
+  document.getElementById('stat-nausea').textContent = nausea;
+  document.getElementById('stat-fatigue').textContent = fatigue;
+
+  // Current phase
+  const phases = data.phases || [];
+  const activePhase = phases.find(p => !p.endDate);
+  if (activePhase) {
+    document.getElementById('stat-phase').textContent = activePhase.pills + '粒';
+    document.getElementById('stat-phase-label').textContent = '当前剂量';
+  } else {
+    document.getElementById('stat-phase').textContent = '-';
+    document.getElementById('stat-phase-label').textContent = '未设置';
+  }
+}
+
+// ==================== RECORD MODAL ====================
+let currentRecordType = null;
+
+function openRecord(type) {
+  currentRecordType = type;
+  const sheet = document.getElementById('modal-sheet');
+  const now = new Date();
+  const nowLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+  let html = '<button class="close-btn" onclick="closeModal()">✕</button>';
+
+  if (type === 'diarrhea') {
+    html += `<h3>🚽 记录腹泻</h3>`;
+    html += `<div class="form-group"><label>便型</label><div class="option-group">`;
+    html += `<button class="option-btn selected" onclick="selectOption(this,'stoolType','watery')">💧 水样便</button>`;
+    html += `<button class="option-btn" onclick="selectOption(this,'stoolType','formed')">💩 成型便</button>`;
+    html += `<button class="option-btn" onclick="selectOption(this,'stoolType','loose')">🌀 稀便</button>`;
+    html += `</div></div>`;
+    html += retroFields(nowLocal);
+    html += `<button class="btn btn-primary" onclick="submitRecord('diarrhea')">✓ 记录本次腹泻</button>`;
+
+  } else if (type === 'pain') {
+    html += `<h3>😣 记录腹痛</h3>`;
+    html += `<div class="form-group"><label>疼痛评分（1=轻微 ～ 10=剧烈）</label>`;
+    html += `<div class="pain-scores">`;
+    for (let i = 1; i <= 10; i++) {
+      html += `<button class="pain-score" onclick="selectOption(this,'painScore',${i})">${i}</button>`;
+    }
+    html += `</div></div>`;
+    html += retroFields(nowLocal);
+    html += `<button class="btn btn-primary" onclick="submitRecord('pain')">✓ 记录腹痛</button>`;
+
+  } else if (type === 'nausea') {
+    html += `<h3>🤢 记录恶心</h3>`;
+    html += retroFields(nowLocal);
+    html += `<button class="btn btn-primary" onclick="submitRecord('nausea')">✓ 记录恶心</button>`;
+
+  } else if (type === 'fatigue') {
+    html += `<h3>😴 记录乏力</h3>`;
+    html += `<div class="form-group"><label>乏力程度</label><div class="option-group">`;
+    html += `<button class="option-btn selected" onclick="selectOption(this,'fatigueLevel','mild')">轻微</button>`;
+    html += `<button class="option-btn" onclick="selectOption(this,'fatigueLevel','moderate')">中度</button>`;
+    html += `<button class="option-btn" onclick="selectOption(this,'fatigueLevel','severe')">严重</button>`;
+    html += `</div></div>`;
+    html += retroFields(nowLocal);
+    html += `<button class="btn btn-primary" onclick="submitRecord('fatigue')">✓ 记录乏力</button>`;
+
+  } else if (type === 'loperamide') {
+    html += `<h3>💊 记录易蒙停</h3>`;
+    html += `<div class="form-group"><label>服用粒数</label>`;
+    html += `<input type="number" id="field-lope-dose" value="1" min="1" max="10" step="1">`;
+    html += `</div>`;
+    html += retroFields(nowLocal);
+    html += `<button class="btn btn-primary" onclick="submitRecord('loperamide')">✓ 记录易蒙停</button>`;
+
+  } else if (type === 'medication') {
+    html += `<h3>💉 服用奈拉替尼</h3>`;
+    html += `<div class="form-group"><label>服用粒数</label>`;
+    const phases = loadData().phases || [];
+    const activePhase = phases.find(p => !p.endDate);
+    const defaultPills = activePhase ? activePhase.pills : 3;
+    html += `<input type="number" id="field-med-dose" value="${defaultPills}" min="1" max="10" step="1">`;
+    html += `</div>`;
+    html += retroFields(nowLocal);
+    html += `<button class="btn btn-primary" onclick="submitRecord('medication')">✓ 记录服药</button>`;
+  }
+
+  sheet.innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function retroFields(nowLocal) {
+  return `
+    <div class="retro-toggle">
+      <input type="checkbox" id="retro-check" onchange="toggleRetro()">
+      <label for="retro-check">补记录 / 导入历史数据</label>
+    </div>
+    <div id="retro-fields" style="display:none">
+      <div class="form-group">
+        <label>日期</label>
+        <input type="date" id="field-retro-date" value="${nowLocal.slice(0,10)}">
+      </div>
+      <div class="form-group">
+        <label>时间段</label>
+        <div class="option-group" id="period-group">
+          <button class="option-btn selected" onclick="selectPeriod(this,'morning')">🌅 上午</button>
+          <button class="option-btn" onclick="selectPeriod(this,'afternoon')">☀️ 下午</button>
+          <button class="option-btn" onclick="selectPeriod(this,'evening')">🌙 晚上</button>
+          <button class="option-btn" onclick="selectPeriod(this,'exact')">🕐 精确</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-lighter);margin-top:4px">上午≈9:00 · 下午≈14:00 · 晚上≈20:00</div>
+      </div>
+      <div class="form-group" id="exact-time-group" style="display:none">
+        <label>精确时间</label>
+        <input type="datetime-local" id="field-retro-time" value="${nowLocal}">
+      </div>
+      <div class="form-group">
+        <label>一次性记录条数</label>
+        <input type="number" id="field-batch-qty" value="1" min="1" max="30" step="1">
+        <div style="font-size:11px;color:var(--text-lighter);margin-top:4px">批量导入历史数据时使用，每条记录时间自动错开2分钟</div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleRetro() {
+  const fields = document.getElementById('retro-fields');
+  fields.style.display = document.getElementById('retro-check').checked ? 'block' : 'none';
+}
+
+function selectPeriod(btn, period) {
+  const parent = btn.parentElement;
+  parent.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedOptions['period'] = period;
+  const exactGroup = document.getElementById('exact-time-group');
+  if (exactGroup) exactGroup.style.display = period === 'exact' ? 'block' : 'none';
+}
+
+let selectedOptions = {};
+
+function selectOption(btn, key, value) {
+  const parent = btn.parentElement;
+  parent.querySelectorAll('.option-btn, .pain-score').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedOptions[key] = value;
+}
+
+function submitRecord(type) {
+  const record = { type };
+
+  // Stool type
+  if (type === 'diarrhea') {
+    record.stoolType = selectedOptions['stoolType'] || 'watery';
+  }
+
+  // Pain score
+  if (type === 'pain') {
+    if (!selectedOptions['painScore']) { showToast('请选择疼痛评分'); return; }
+    record.painScore = selectedOptions['painScore'];
+  }
+
+  // Fatigue level
+  if (type === 'fatigue') {
+    record.fatigueLevel = selectedOptions['fatigueLevel'] || 'mild';
+  }
+
+  // Loperamide dose
+  if (type === 'loperamide') {
+    const doseEl = document.getElementById('field-lope-dose');
+    record.loperamideDose = parseInt(doseEl?.value) || 1;
+  }
+
+  // Medication dose
+  if (type === 'medication') {
+    const doseEl = document.getElementById('field-med-dose');
+    record.medicationDose = parseInt(doseEl?.value) || 3;
+  }
+
+  // Time handling
+  const isRetro = document.getElementById('retro-check')?.checked;
+  let actualTime;
+  if (isRetro) {
+    const period = selectedOptions['period'] || 'morning';
+    const dateVal = document.getElementById('field-retro-date')?.value || getTodayStr();
+    if (period === 'exact') {
+      const retroTime = document.getElementById('field-retro-time')?.value;
+      actualTime = retroTime ? new Date(retroTime) : new Date();
+    } else {
+      const hour = period === 'morning' ? 9 : period === 'afternoon' ? 14 : 20;
+      actualTime = new Date(dateVal + 'T' + String(hour).padStart(2,'0') + ':00:00');
+    }
+    record.isRetrospective = true;
+  } else {
+    actualTime = new Date();
+    record.isRetrospective = false;
+  }
+  record.actualTime = actualTime.toISOString();
+
+  // Batch quantity (for historical data import)
+  const qty = Math.min(parseInt(document.getElementById('field-batch-qty')?.value) || 1, 30);
+
+  for (let i = 0; i < qty; i++) {
+    const r = { ...record };
+    // Stagger times by 2 minutes per record so each is distinguishable
+    const t = new Date(actualTime);
+    t.setMinutes(t.getMinutes() + i * 2);
+    r.actualTime = t.toISOString();
+    const saved = addRecord(r);
+    // Only check medication phase update once (for the first record)
+    if (i === 0 && type === 'medication') {
+      checkAndUpdatePhase(saved);
+    }
+  }
+
+  selectedOptions = {};
+  closeModal();
+  renderHome();
+  showToast(qty > 1 ? `✓ 已批量记录 ${qty} 条` : '✓ 记录成功');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+  selectedOptions = {};
+  currentRecordType = null;
+}
+
+// ==================== MEDICATION PHASES ====================
+function checkAndUpdatePhase(record) {
+  const data = loadData();
+  const phases = data.phases || [];
+  const activePhase = phases.find(p => !p.endDate);
+
+  if (activePhase && record.medicationDose !== activePhase.pills) {
+    // Pill count changed — close current phase and start new one
+    activePhase.endDate = new Date(record.actualTime || record.createdAt).toISOString().slice(0, 10);
+    const days = Math.round((new Date(activePhase.endDate) - new Date(activePhase.startDate)) / 86400000) + 1;
+    activePhase.days = days;
+    showToast(`💊 ${activePhase.pills}粒/天 阶段结束，持续 ${days} 天`);
+
+    phases.push({
+      startDate: activePhase.endDate,
+      pills: record.medicationDose,
+      startDateFull: activePhase.endDate
+    });
+    data.phases = phases;
+    saveData(data);
+  } else if (!activePhase) {
+    // No active phase — start one
+    phases.push({
+      startDate: (record.actualTime || record.createdAt).slice(0, 10),
+      pills: record.medicationDose
+    });
+    data.phases = phases;
+    saveData(data);
+  }
+}
+
+function addPhase() {
+  const pills = prompt('请输入每天服用粒数（如 3、4、5、6）：');
+  if (!pills || isNaN(parseInt(pills))) return;
+  const date = prompt('开始日期（格式：2026-05-04，留空则为今天）：', getTodayStr());
+  if (!date) return;
+
+  const data = loadData();
+  const phases = data.phases || [];
+
+  // Close current active phase
+  const activePhase = phases.find(p => !p.endDate);
+  if (activePhase) {
+    activePhase.endDate = date;
+    const days = Math.round((new Date(date) - new Date(activePhase.startDate)) / 86400000);
+    activePhase.days = Math.max(1, days);
+  }
+
+  phases.push({ startDate: date, pills: parseInt(pills) });
+  data.phases = phases;
+  saveData(data);
+  renderSettings();
+  renderHome();
+  showToast('✓ 阶段已添加');
+}
+
+function renderPhases() {
+  const data = loadData();
+  const phases = data.phases || [];
+  const container = document.getElementById('phase-list');
+  if (!phases.length) {
+    container.innerHTML = '<div class="empty-state">暂无剂量阶段，点击下方按钮添加</div>';
+    return;
+  }
+
+  container.innerHTML = phases.map((p, i) => {
+    const isActive = !p.endDate;
+    const days = p.days || (p.endDate ? Math.max(1, Math.round((new Date(p.endDate) - new Date(p.startDate)) / 86400000)) : null);
+    return `<div class="phase-item ${isActive ? 'current' : ''}">
+      <div class="phase-info">
+        <strong>${p.pills} 粒/天</strong>
+        <div style="font-size:12px;color:var(--text-light)">${p.startDate} ${p.endDate ? '→ ' + p.endDate : '→ 至今'}</div>
+      </div>
+      <div class="phase-days">${isActive ? '进行中' : (days + ' 天')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ==================== HISTORY PAGE ====================
+let currentFilter = 'all';
+
+function setFilter(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('#filter-bar .filter-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderHistory();
+}
+
+function renderHistory() {
+  const data = loadData();
+  let records = [...data.records].reverse();
+
+  if (currentFilter !== 'all') {
+    records = records.filter(r => r.type === currentFilter);
+  }
+
+  const container = document.getElementById('history-list');
+  if (!records.length) {
+    container.innerHTML = '<div class="empty-state">暂无记录</div>';
+    return;
+  }
+
+  // Group by date
+  const groups = {};
+  records.forEach(r => {
+    const dateKey = new Date(r.actualTime || r.createdAt).toLocaleDateString('zh-CN', {
+      month: 'long', day: 'numeric', weekday: 'short'
+    });
+    if (!groups[dateKey]) groups[dateKey] = [];
+    groups[dateKey].push(r);
+  });
+
+  let html = '';
+  for (const [date, items] of Object.entries(groups)) {
+    html += `<div class="history-date-header">${date}</div>`;
+    items.forEach(r => {
+      const time = fmtTime(r.actualTime || r.createdAt);
+      const isRetro = r.isRetrospective ? ' <span class="retro-badge">补录</span>' : '';
+      let icon, detail;
+      switch (r.type) {
+        case 'diarrhea':
+          icon = '🚽';
+          detail = `第${r.diarrheaCount || '?'}次腹泻 · ${r.stoolType === 'watery' ? '水样便' : r.stoolType === 'formed' ? '成型便' : '稀便'}`;
+          break;
+        case 'pain':
+          icon = '😣';
+          detail = `腹痛评分: ${r.painScore}/10`;
+          break;
+        case 'nausea':
+          icon = '🤢';
+          detail = '恶心';
+          break;
+        case 'fatigue':
+          icon = '😴';
+          detail = `乏力 (${r.fatigueLevel === 'mild' ? '轻微' : r.fatigueLevel === 'moderate' ? '中度' : '严重'})`;
+          break;
+        case 'loperamide':
+          icon = '💊';
+          detail = `易蒙停 ${r.loperamideDose || 1} 粒`;
+          break;
+        case 'medication':
+          icon = '💉';
+          detail = `奈拉替尼 ${r.medicationDose || '?'} 粒`;
+          break;
+        default:
+          icon = '📝';
+          detail = '';
+      }
+      html += `<div class="history-item">
+        <span class="type-icon">${icon}</span>
+        <span class="time">${time}</span>
+        <span class="detail">${detail}${isRetro}<div class="sub">${isRetro ? '(补录时间: ' + fmtFull(r.actualTime || r.createdAt) + ')' : ''}</div></span>
+        <button class="delete-btn" onclick="if(confirm('确认删除此记录？')){deleteRecord(${r.id});renderHistory();renderHome();showToast('已删除')}">🗑</button>
+      </div>`;
+    });
+  }
+  container.innerHTML = html;
+}
+
+function generateWeeklySummary() {
+  const data = loadData();
+  const records = data.records;
+  const phases = data.phases || [];
+
+  if (!records.length) {
+    document.getElementById('weekly-summary-text').innerHTML =
+      '还没有记录呢，从今天开始记录吧。每 7 天这里会出现一份温暖的小结 🌿';
+    return;
+  }
+
+  // Last 7 days
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    days.push(d);
+  }
+
+  const daily = {};
+  days.forEach(d => {
+    const key = d.toISOString().slice(0, 10);
+    daily[key] = { diarrhea: 0, loperamide: 0, pains: [], nausea: 0, fatigue: 0, date: d };
+  });
+
+  let morning = 0, afternoon = 0, evening = 0, night = 0;
+
+  records.forEach(r => {
+    const day = (r.actualTime || r.createdAt).slice(0, 10);
+    if (!daily[day]) return;
+    const h = new Date(r.actualTime || r.createdAt).getHours();
+    switch (r.type) {
+      case 'diarrhea':
+        daily[day].diarrhea++;
+        if (h >= 6 && h < 12) morning++;
+        else if (h >= 12 && h < 18) afternoon++;
+        else if (h >= 18 && h < 24) evening++;
+        else night++;
+        break;
+      case 'loperamide': daily[day].loperamide += (r.loperamideDose || 1); break;
+      case 'pain': daily[day].pains.push(r.painScore); break;
+      case 'nausea': daily[day].nausea++; break;
+      case 'fatigue': daily[day].fatigue++; break;
+    }
+  });
+
+  let totalDiarrhea = 0, totalLoperamide = 0, totalNausea = 0, totalFatigue = 0;
+  let worstDay = null, worstScore = -1;
+  Object.entries(daily).forEach(([key, d]) => {
+    totalDiarrhea += d.diarrhea;
+    totalLoperamide += d.loperamide;
+    totalNausea += d.nausea;
+    totalFatigue += d.fatigue;
+    const score = d.diarrhea * 3 + d.pains.reduce((s, p) => s + p, 0) + d.nausea * 2 + d.fatigue * 2;
+    if (score > worstScore) { worstScore = score; worstDay = d; }
+  });
+
+  const avgDiarrhea = (totalDiarrhea / 7).toFixed(1);
+  const activePhase = phases.find(p => !p.endDate);
+  const pills = activePhase ? activePhase.pills : '?';
+
+  // Peak period
+  const periods = [
+    { name: '上午', count: morning },
+    { name: '下午', count: afternoon },
+    { name: '晚上', count: evening },
+    { name: '凌晨', count: night }
+  ];
+  const peak = periods.sort((a, b) => b.count - a.count)[0];
+
+  // Build text
+  let html = '';
+
+  // Opening
+  html += `<span>本周你每天早上服用 <span class="highlight">${pills} 粒</span>奈拉替尼。`;
+
+  // Diarrhea
+  if (totalDiarrhea === 0) {
+    html += `这周你没有腹泻记录，真是太棒了！`;
+  } else {
+    html += `平均每天腹泻 <span class="highlight">${avgDiarrhea} 次</span>`;
+    if (peak && peak.count > 0) {
+      html += `，主要集中在<span class="highlight">${peak.name}</span>`;
+    }
+    html += `。`;
+  }
+
+  // Loperamide
+  if (totalLoperamide > 0) {
+    html += `这周你一共用了 <span class="highlight">${totalLoperamide} 粒</span>易蒙停来应对。`;
+  }
+
+  // Other symptoms
+  const others = [];
+  if (totalNausea > 0) others.push(`<span class="highlight">${totalNausea} 次</span>恶心`);
+  if (totalFatigue > 0) others.push(`<span class="highlight">${totalFatigue} 次</span>乏力`);
+  if (others.length > 0) {
+    html += `另外还有 ${others.join('和')}。`;
+  }
+
+  // Worst day
+  if (worstDay && worstScore > 0) {
+    const wd = worstDay.date;
+    const weekday = wd.toLocaleDateString('zh-CN', { weekday: 'short' });
+    const md = wd.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+    html += `<span class="warm"><strong>${weekday}(${md})</strong> 这一天你过得很辛苦</span>`;
+    const det = [];
+    if (worstDay.diarrhea > 0) det.push(`腹泻 ${worstDay.diarrhea} 次`);
+    if (worstDay.pains.length > 0) det.push(`腹痛最高 ${Math.max(...worstDay.pains)} 分`);
+    if (det.length > 0) html += `（${det.join('，')}）`;
+    html += `，但你还是坚持下来了。`;
+  }
+
+  // Closing
+  html += `<br>又过了 7 天呢，你在认真地照顾自己 <span class="warm">🌿</span></span>`;
+
+  document.getElementById('weekly-summary-text').innerHTML = html;
+}
+
+// ==================== TRENDS PAGE ====================
+function renderTrends() {
+  generateWeeklySummary();
+
+  const data = loadData();
+  const records = data.records;
+
+  // Get last 30 days
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+
+  // Aggregate by day
+  const daily = {};
+  days.forEach(d => { daily[d] = { diarrhea: 0, loperamide: 0, pains: [], nausea: 0, fatigue: 0 }; });
+
+  records.forEach(r => {
+    const day = (r.actualTime || r.createdAt).slice(0, 10);
+    if (!daily[day]) return;
+    switch (r.type) {
+      case 'diarrhea': daily[day].diarrhea++; break;
+      case 'loperamide': daily[day].loperamide += (r.loperamideDose || 1); break;
+      case 'pain': daily[day].pains.push(r.painScore); break;
+      case 'nausea': daily[day].nausea++; break;
+      case 'fatigue': daily[day].fatigue++; break;
+    }
+  });
+
+  const labels = days.map(d => d.slice(5)); // MM-DD
+  const diarrheaData = days.map(d => daily[d].diarrhea);
+  const loperamideData = days.map(d => daily[d].loperamide);
+  const painMaxData = days.map(d => daily[d].pains.length ? Math.max(...daily[d].pains) : null);
+  const nauseaData = days.map(d => daily[d].nausea);
+  const fatigueData = days.map(d => daily[d].fatigue);
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: true,
+    aspectRatio: 2.5,
+    plugins: { legend: { display: true, labels: { boxWidth: 12, padding: 12, font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { font: { size: 10 }, maxTicksLimit: 15, maxRotation: 45 }, grid: { display: false } },
+      y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#F0E6DA' } }
+    }
+  };
+
+  // Diarrhea chart
+  if (document.getElementById('chart-diarrhea')) {
+    destroyChart('chart-diarrhea');
+    const ctx = document.getElementById('chart-diarrhea').getContext('2d');
+    charts['chart-diarrhea'] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: '腹泻次数', data: diarrheaData,
+          backgroundColor: '#F7C873', borderColor: '#E8951A', borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: chartOptions
+    });
+  }
+
+  // Pain chart
+  if (document.getElementById('chart-pain')) {
+    destroyChart('chart-pain');
+    const ctx = document.getElementById('chart-pain').getContext('2d');
+    charts['chart-pain'] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '腹痛峰值', data: painMaxData,
+          borderColor: '#F08379', backgroundColor: 'rgba(240,131,121,0.1)',
+          fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#F08379',
+          spanGaps: false
+        }]
+      },
+      options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, max: 10, ticks: { stepSize: 1 } } } }
+    });
+  }
+
+  // Comparison chart
+  if (document.getElementById('chart-comparison')) {
+    destroyChart('chart-comparison');
+    const ctx = document.getElementById('chart-comparison').getContext('2d');
+    charts['chart-comparison'] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: '腹泻次数', data: diarrheaData, borderColor: '#E8951A', tension: 0.3, pointRadius: 2 },
+          { label: '易蒙停(粒)', data: loperamideData, borderColor: '#8FC9A9', tension: 0.3, pointRadius: 2, borderDash: [4,3] }
+        ]
+      },
+      options: chartOptions
+    });
+  }
+
+  // Other symptoms chart
+  if (document.getElementById('chart-other')) {
+    destroyChart('chart-other');
+    const ctx = document.getElementById('chart-other').getContext('2d');
+    charts['chart-other'] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: '恶心', data: nauseaData, backgroundColor: '#C9A96E', borderRadius: 4 },
+          { label: '乏力', data: fatigueData, backgroundColor: '#B8B0A0', borderRadius: 4 }
+        ]
+      },
+      options: chartOptions
+    });
+  }
+}
+
+const charts = {};
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); charts[id] = null; }
+}
+
+// ==================== SETTINGS PAGE ====================
+function renderSettings() {
+  renderPhases();
+}
+
+// ==================== EXPORT / IMPORT ====================
+function exportCSV() {
+  const data = loadData();
+  let csv = '类型,时间,详情,是否补录\n';
+  data.records.forEach(r => {
+    const time = r.actualTime || r.createdAt;
+    let detail = '';
+    switch (r.type) {
+      case 'diarrhea': detail = `第${r.diarrheaCount||'?'}次,${r.stoolType==='watery'?'水样便':r.stoolType==='formed'?'成型便':'稀便'}`; break;
+      case 'pain': detail = `评分${r.painScore}/10`; break;
+      case 'nausea': detail = '恶心'; break;
+      case 'fatigue': detail = `乏力-${r.fatigueLevel||'轻微'}`; break;
+      case 'loperamide': detail = `易蒙停${r.loperamideDose||1}粒`; break;
+      case 'medication': detail = `奈拉替尼${r.medicationDose||'?'}粒`; break;
+    }
+    csv += `${r.type},${new Date(time).toLocaleString('zh-CN')},${detail},${r.isRetrospective?'是':'否'}\n`;
+  });
+  download(csv, '副作用记录.csv', 'text/csv;charset=utf-8');
+}
+
+function exportJSON() {
+  const data = loadData();
+  download(JSON.stringify(data, null, 2), '副作用记录_备份_' + getTodayStr() + '.json', 'application/json');
+}
+
+function download(content, filename, mime) {
+  const blob = new Blob(['﻿' + content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ 已导出');
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.records || !Array.isArray(data.records)) throw new Error('格式错误');
+      if (confirm(`即将导入 ${data.records.length} 条记录，会覆盖当前数据。确定继续？`)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        showToast('✓ 导入成功');
+        renderHome();
+        renderSettings();
+      }
+    } catch(err) {
+      showToast('导入失败：文件格式不正确');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function clearData() {
+  if (confirm('确定清除所有记录？此操作不可恢复！\n建议先导出备份。\n\n要现在导出备份吗？')) {
+    if (confirm('是否先导出备份？点"确定"导出备份后再清除，点"取消"直接清除。')) {
+      exportJSON();
+    }
+    localStorage.removeItem(STORAGE_KEY);
+    showToast('✓ 数据已清除');
+    renderHome();
+    renderHistory();
+    renderSettings();
+  }
+}
+
+// ==================== INIT ====================
+function init() {
+  renderHome();
+
+  // Register service worker for offline caching
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

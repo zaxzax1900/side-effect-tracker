@@ -1,0 +1,12 @@
+{
+  "name": "副作用记录",
+  "short_name": "副作用记录",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#FFF8F0",
+  "theme_color": "#FFF8F0",
+  "description": "靶向药副作用记录工具",
+  "icons": [
+    { "src": "icon.svg", "sizes": "192x192", "type": "image/svg+xml" }
+  ]
+}
