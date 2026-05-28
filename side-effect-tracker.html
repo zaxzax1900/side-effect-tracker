@@ -486,6 +486,22 @@ input:focus, textarea:focus, select:focus {
 }
 .toast.show { opacity: 1; }
 
+/* Pill icons */
+.pill-icon {
+  display: inline-block;
+  width: 28px; height: 14px;
+  border-radius: 7px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+.pill-nera { background: #8B5E3C; }
+.pill-lope {
+  background: linear-gradient(to right, #6BAF92 0%, #6BAF92 50%, #C4C4B4 50%, #C4C4B4 100%);
+  border: 1px solid rgba(0,0,0,0.08);
+}
+.pill-sm { width: 18px; height: 9px; border-radius: 5px; }
+
 /* Retrospective toggle */
 .retro-toggle {
   display: flex;
@@ -524,7 +540,7 @@ input:focus, textarea:focus, select:focus {
     <div class="today-stats" id="today-stats">
       <div class="today-stat"><div class="num" id="stat-diarrhea">0</div><div class="label">腹泻</div></div>
       <div class="today-stat"><div class="num" id="stat-loperamide">0</div><div class="label">易蒙停</div></div>
-      <div class="today-stat"><div class="num" id="stat-pain">-</div><div class="label">腹痛峰值</div></div>
+      <div class="today-stat"><div class="num" id="stat-pain">-</div><div class="label" id="stat-pain-label">腹痛</div></div>
       <div class="today-stat"><div class="num" id="stat-nausea">0</div><div class="label">恶心</div></div>
       <div class="today-stat"><div class="num" id="stat-fatigue">0</div><div class="label">乏力</div></div>
       <div class="today-stat"><div class="num" id="stat-phase">-</div><div class="label" id="stat-phase-label">当前剂量</div></div>
@@ -547,10 +563,10 @@ input:focus, textarea:focus, select:focus {
         <span class="icon">😴</span><span class="label">乏力</span>
       </button>
       <button class="quick-btn loperamide" onclick="openRecord('loperamide')">
-        <span class="icon">💊</span><span class="label">易蒙停</span>
+        <span class="icon"><span class="pill-icon pill-lope"></span></span><span class="label">易蒙停</span>
       </button>
       <button class="quick-btn medication" onclick="openRecord('medication')">
-        <span class="icon">💊</span><span class="label">服用奈拉替尼</span>
+        <span class="icon"><span class="pill-icon pill-nera"></span></span><span class="label">服用奈拉替尼</span>
       </button>
       <button class="quick-btn pause" id="btn-pause-resume" onclick="openPauseResume()">
         <span class="icon" id="pause-icon">🛑</span><span class="label" id="pause-label">暂停服药</span>
@@ -568,8 +584,8 @@ input:focus, textarea:focus, select:focus {
     <button class="filter-chip" onclick="setFilter('pain', this)">😣 腹痛</button>
     <button class="filter-chip" onclick="setFilter('nausea', this)">🤢 恶心</button>
     <button class="filter-chip" onclick="setFilter('fatigue', this)">😴 乏力</button>
-    <button class="filter-chip" onclick="setFilter('loperamide', this)">💊 易蒙停</button>
-    <button class="filter-chip" onclick="setFilter('medication', this)">💊 服药</button>
+    <button class="filter-chip" onclick="setFilter('loperamide', this)"><span class="pill-icon pill-lope pill-sm"></span> 易蒙停</button>
+    <button class="filter-chip" onclick="setFilter('medication', this)"><span class="pill-icon pill-nera pill-sm"></span> 服药</button>
   </div>
   <div id="history-list"></div>
 </div>
@@ -759,6 +775,7 @@ function renderHome() {
   document.getElementById('stat-diarrhea').textContent = diarrhea;
   document.getElementById('stat-loperamide').textContent = loperamide;
   document.getElementById('stat-pain').textContent = pains.length ? Math.max(...pains) : '-';
+  document.getElementById('stat-pain-label').textContent = pains.length ? '腹痛 · ' + pains.length + '次 · 峰值' : '腹痛';
   document.getElementById('stat-nausea').textContent = nausea;
   document.getElementById('stat-fatigue').textContent = fatigue;
 
@@ -1261,11 +1278,11 @@ function renderHistory() {
           detail = `乏力 (${r.fatigueLevel === 'mild' ? '轻微' : r.fatigueLevel === 'moderate' ? '中度' : '严重'})`;
           break;
         case 'loperamide':
-          icon = '💊';
+          icon = `<span class="pill-icon pill-lope" style="width:22px;height:11px;border-radius:6px"></span>`;
           detail = `易蒙停 ${r.loperamideDose || 1} 粒`;
           break;
         case 'medication':
-          icon = '💊';
+          icon = `<span class="pill-icon pill-nera" style="width:22px;height:11px;border-radius:6px"></span>`;
           detail = `奈拉替尼 ${r.medicationDose || '?'} 粒`;
           break;
         default:
@@ -1273,7 +1290,7 @@ function renderHistory() {
           detail = '';
       }
       html += `<div class="history-item">
-        <span class="type-icon">${icon}</span>
+        ${icon ? '<span class="type-icon">' + icon + '</span>' : ''}
         <span class="time">${time}</span>
         <span class="detail">${detail}${isRetro}<div class="sub">${isRetro ? '(补录时间: ' + fmtFull(r.actualTime || r.createdAt) + ')' : ''}</div></span>
         <button class="delete-btn" onclick="if(confirm('确认删除此记录？')){deleteRecord(${r.id});renderHistory();renderHome();showToast('已删除')}">🗑</button>
@@ -1330,13 +1347,15 @@ function generateWeeklySummary() {
     }
   });
 
-  let totalDiarrhea = 0, totalLoperamide = 0, totalNausea = 0, totalFatigue = 0;
+  let totalDiarrhea = 0, totalLoperamide = 0, totalNausea = 0, totalFatigue = 0, totalPainCount = 0, peakPainScore = 0;
   let worstDay = null, worstScore = -1;
   Object.entries(daily).forEach(([key, d]) => {
     totalDiarrhea += d.diarrhea;
     totalLoperamide += d.loperamide;
     totalNausea += d.nausea;
     totalFatigue += d.fatigue;
+    totalPainCount += d.pains.length;
+    if (d.pains.length) peakPainScore = Math.max(peakPainScore, ...d.pains);
     const score = d.diarrhea * 3 + d.pains.reduce((s, p) => s + p, 0) + d.nausea * 2 + d.fatigue * 2;
     if (score > worstScore) { worstScore = score; worstDay = d; }
   });
@@ -1385,6 +1404,11 @@ function generateWeeklySummary() {
     html += `这周你一共用了 <span class="highlight">${totalLoperamide} 粒</span>易蒙停来应对。`;
   }
 
+  // Pain
+  if (totalPainCount > 0) {
+    html += `腹痛发生了 <span class="highlight">${totalPainCount} 次</span>，最高 ${peakPainScore} 分。`;
+  }
+
   // Other symptoms
   const others = [];
   if (totalNausea > 0) others.push(`<span class="highlight">${totalNausea} 次</span>恶心`);
@@ -1401,7 +1425,7 @@ function generateWeeklySummary() {
     html += `<span class="warm"><strong>${weekday}(${md})</strong> 这一天你过得很辛苦</span>`;
     const det = [];
     if (worstDay.diarrhea > 0) det.push(`腹泻 ${worstDay.diarrhea} 次`);
-    if (worstDay.pains.length > 0) det.push(`腹痛最高 ${Math.max(...worstDay.pains)} 分`);
+    if (worstDay.pains.length > 0) det.push(`腹痛 ${worstDay.pains.length} 次 · 最高 ${Math.max(...worstDay.pains)} 分`);
     if (det.length > 0) html += `（${det.join('，')}）`;
     html += `，但你还是坚持下来了。`;
   }
