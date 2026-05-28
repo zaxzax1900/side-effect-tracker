@@ -445,6 +445,12 @@ input:focus, textarea:focus, select:focus {
   background: #FFF5F5;
   border-color: #F0D0D0;
 }
+.phase-delete-btn {
+  background: none; border: none; font-size: 18px; cursor: pointer;
+  color: var(--text-lighter); padding: 4px 8px; border-radius: 50%;
+  line-height: 1; transition: all 0.15s;
+}
+.phase-delete-btn:hover { color: #D44; background: #FEE; }
 
 /* Weekly summary */
 .weekly-card {
@@ -1167,6 +1173,27 @@ function checkAndUpdatePhase(record) {
   }
 }
 
+function deletePhase(index) {
+  const data = loadData();
+  const phases = data.phases || [];
+  if (index < 0 || index >= phases.length) return;
+  const p = phases[index];
+  const label = p.pills === 0 ? ('暂停(' + (p.reason || '未注明') + ')') : (p.pills + '粒/天');
+  if (!confirm('删除阶段：' + label + '\n' + p.startDate + ' → ' + (p.endDate || '至今') + '\n\n注意：仅删除阶段定义，不影响已有的腹泻/服药记录。')) return;
+
+  phases.splice(index, 1);
+  // If deleted the active phase, the previous one becomes active
+  if (!p.endDate && phases.length > 0) {
+    const prev = phases[index - 1];
+    if (prev) delete prev.endDate;
+  }
+  data.phases = phases;
+  saveData(data);
+  renderSettings();
+  renderHome();
+  showToast('✓ 阶段已删除');
+}
+
 function addPhase() {
   const pills = prompt('请输入每天服用粒数（0=暂停，如 3、4、5、6）：');
   if (pills === null || pills === '' || isNaN(parseInt(pills))) return;
@@ -1213,6 +1240,7 @@ function renderPhases() {
         <div style="font-size:12px;color:var(--text-light)">${p.startDate} ${p.endDate ? '→ ' + p.endDate : '→ 至今'}</div>
       </div>
       <div class="phase-days">${isActive ? (isPaused ? '暂停中' : '进行中') : (days + ' 天')}</div>
+      <button class="phase-delete-btn" onclick="event.stopPropagation();deletePhase(${i})" title="删除此阶段">×</button>
     </div>`;
   }).join('');
 }
