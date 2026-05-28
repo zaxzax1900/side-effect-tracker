@@ -117,6 +117,7 @@ body {
 .quick-btn.fatigue { border-left: 4px solid #B8B0A0; }
 .quick-btn.loperamide { border-left: 4px solid #8FC9A9; }
 .quick-btn.medication { border-left: 4px solid #A0B8D0; }
+.quick-btn.pause { border-left: 4px solid #D0A0A0; }
 
 /* Today summary */
 .today-stats {
@@ -439,6 +440,11 @@ input:focus, textarea:focus, select:focus {
   border: 2px solid var(--primary);
   background: var(--primary-pale);
 }
+.phase-item.paused-phase {
+  opacity: 0.7;
+  background: #FFF5F5;
+  border-color: #F0D0D0;
+}
 
 /* Weekly summary */
 .weekly-card {
@@ -544,7 +550,10 @@ input:focus, textarea:focus, select:focus {
         <span class="icon">💊</span><span class="label">易蒙停</span>
       </button>
       <button class="quick-btn medication" onclick="openRecord('medication')">
-        <span class="icon">💉</span><span class="label">服用奈拉替尼</span>
+        <span class="icon">💊</span><span class="label">服用奈拉替尼</span>
+      </button>
+      <button class="quick-btn pause" id="btn-pause-resume" onclick="openPauseResume()">
+        <span class="icon" id="pause-icon">🛑</span><span class="label" id="pause-label">暂停服药</span>
       </button>
     </div>
   </div>
@@ -560,7 +569,7 @@ input:focus, textarea:focus, select:focus {
     <button class="filter-chip" onclick="setFilter('nausea', this)">🤢 恶心</button>
     <button class="filter-chip" onclick="setFilter('fatigue', this)">😴 乏力</button>
     <button class="filter-chip" onclick="setFilter('loperamide', this)">💊 易蒙停</button>
-    <button class="filter-chip" onclick="setFilter('medication', this)">💉 服药</button>
+    <button class="filter-chip" onclick="setFilter('medication', this)">💊 服药</button>
   </div>
   <div id="history-list"></div>
 </div>
@@ -756,12 +765,21 @@ function renderHome() {
   // Current phase
   const phases = data.phases || [];
   const activePhase = phases.find(p => !p.endDate);
-  if (activePhase) {
-    document.getElementById('stat-phase').textContent = activePhase.pills + '粒';
-    document.getElementById('stat-phase-label').textContent = '当前剂量';
+  const pauseBtn = document.getElementById('btn-pause-resume');
+  const pauseIcon = document.getElementById('pause-icon');
+  const pauseLabel = document.getElementById('pause-label');
+
+  if (activePhase && activePhase.pills === 0) {
+    // Paused state
+    const pauseDays = activePhase.startDate ?
+      Math.floor((new Date() - new Date(activePhase.startDate)) / 86400000) + 1 : '?';
+    document.getElementById('stat-phase').textContent = '暂停';
+    document.getElementById('stat-phase-label').textContent = '已停' + pauseDays + '天';
+    if (pauseBtn) { pauseBtn.classList.add('paused'); pauseIcon.textContent = '💊'; pauseLabel.textContent = '恢复服药'; }
   } else {
-    document.getElementById('stat-phase').textContent = '-';
-    document.getElementById('stat-phase-label').textContent = '未设置';
+    document.getElementById('stat-phase').textContent = activePhase ? activePhase.pills + '粒' : '-';
+    document.getElementById('stat-phase-label').textContent = '当前剂量';
+    if (pauseBtn) { pauseBtn.classList.remove('paused'); pauseIcon.textContent = '🛑'; pauseLabel.textContent = '暂停服药'; }
   }
 }
 
@@ -821,15 +839,22 @@ function openRecord(type) {
     html += `<button class="btn btn-primary" onclick="submitRecord('loperamide')">✓ 记录易蒙停</button>`;
 
   } else if (type === 'medication') {
-    html += `<h3>💉 服用奈拉替尼</h3>`;
-    html += `<div class="form-group"><label>服用粒数</label>`;
     const phases = loadData().phases || [];
     const activePhase = phases.find(p => !p.endDate);
-    const defaultPills = activePhase ? activePhase.pills : 3;
-    html += `<input type="number" id="field-med-dose" value="${defaultPills}" min="1" max="10" step="1">`;
-    html += `</div>`;
-    html += retroFields(nowLocal);
-    html += `<button class="btn btn-primary" onclick="submitRecord('medication')">✓ 记录服药</button>`;
+    if (activePhase && activePhase.pills === 0) {
+      html += `<h3>💊 服用奈拉替尼</h3>`;
+      html += `<div class="form-group" style="text-align:center;padding:16px;color:var(--accent)">`;
+      html += `当前处于<strong>暂停服药</strong>状态。<br>如需服药，请先点击「恢复服药」按钮。</div>`;
+      html += `<button class="btn btn-secondary" style="width:100%" onclick="closeModal()">关闭</button>`;
+    } else {
+      const defaultPills = activePhase ? activePhase.pills : 3;
+      html += `<h3>💊 服用奈拉替尼</h3>`;
+      html += `<div class="form-group"><label>服用粒数</label>`;
+      html += `<input type="number" id="field-med-dose" value="${defaultPills}" min="1" max="10" step="1">`;
+      html += `</div>`;
+      html += retroFields(nowLocal);
+      html += `<button class="btn btn-primary" onclick="submitRecord('medication')">✓ 记录服药</button>`;
+    }
   }
 
   sheet.innerHTML = html;
@@ -972,6 +997,128 @@ function closeModal() {
   currentRecordType = null;
 }
 
+// ==================== PAUSE / RESUME ====================
+
+function openPauseResume() {
+  const data = loadData();
+  const phases = data.phases || [];
+  const activePhase = phases.find(p => !p.endDate);
+  const isPaused = activePhase && activePhase.pills === 0;
+
+  if (isPaused) {
+    openResumeModal(phases);
+  } else {
+    openPauseModal();
+  }
+}
+
+function openPauseModal() {
+  const sheet = document.getElementById('modal-sheet');
+  const now = new Date();
+  const nowLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+  sheet.innerHTML = `
+    <button class="close-btn" onclick="closeModal()">✕</button>
+    <h3>🛑 暂停服药</h3>
+    <div class="form-group">
+      <label>停药原因</label>
+      <input type="text" id="field-pause-reason" placeholder="例如：遵医嘱、副作用严重...">
+    </div>
+    ${retroFields(nowLocal)}
+    <button class="btn btn-primary" onclick="submitPause()">✓ 确认暂停</button>
+  `;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function submitPause() {
+  const reason = document.getElementById('field-pause-reason')?.value || '未注明';
+  const data = loadData();
+  const phases = data.phases || [];
+
+  // Close current active phase
+  const activeIdx = phases.findIndex(p => !p.endDate);
+  let dateStr;
+  const isRetro = document.getElementById('retro-check')?.checked;
+  if (isRetro) {
+    const retroDate = document.getElementById('field-retro-date')?.value;
+    dateStr = retroDate || getTodayStr();
+  } else {
+    dateStr = getTodayStr();
+  }
+
+  if (activeIdx >= 0) {
+    phases[activeIdx].endDate = dateStr;
+    const days = Math.round((new Date(dateStr) - new Date(phases[activeIdx].startDate)) / 86400000);
+    phases[activeIdx].days = Math.max(1, days);
+  }
+
+  // Add pause phase
+  phases.push({ startDate: dateStr, pills: 0, reason: reason });
+  data.phases = phases;
+  saveData(data);
+
+  selectedOptions = {};
+  closeModal();
+  renderHome();
+  renderSettings();
+  showToast('✓ 已暂停服药');
+}
+
+function openResumeModal(phases) {
+  const sheet = document.getElementById('modal-sheet');
+  const now = new Date();
+  const nowLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+  // Find previous pill count
+  const prevPills = phases.filter(p => p.pills > 0 && p.endDate).slice(-1)[0]?.pills || 3;
+
+  sheet.innerHTML = `
+    <button class="close-btn" onclick="closeModal()">✕</button>
+    <h3>💊 恢复服药</h3>
+    <div class="form-group">
+      <label>恢复粒数/天（沿用暂停前：${prevPills} 粒）</label>
+      <input type="number" id="field-resume-dose" value="${prevPills}" min="1" max="10" step="1">
+    </div>
+    ${retroFields(nowLocal)}
+    <button class="btn btn-primary" onclick="submitResume()">✓ 确认恢复</button>
+  `;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function submitResume() {
+  const pills = parseInt(document.getElementById('field-resume-dose')?.value) || 3;
+  const data = loadData();
+  const phases = data.phases || [];
+
+  // Close current pause phase
+  const activeIdx = phases.findIndex(p => !p.endDate);
+  let dateStr;
+  const isRetro = document.getElementById('retro-check')?.checked;
+  if (isRetro) {
+    const retroDate = document.getElementById('field-retro-date')?.value;
+    dateStr = retroDate || getTodayStr();
+  } else {
+    dateStr = getTodayStr();
+  }
+
+  if (activeIdx >= 0) {
+    phases[activeIdx].endDate = dateStr;
+    const days = Math.round((new Date(dateStr) - new Date(phases[activeIdx].startDate)) / 86400000);
+    phases[activeIdx].days = Math.max(1, days);
+  }
+
+  // Add new medication phase
+  phases.push({ startDate: dateStr, pills: pills });
+  data.phases = phases;
+  saveData(data);
+
+  selectedOptions = {};
+  closeModal();
+  renderHome();
+  renderSettings();
+  showToast('✓ 已恢复服药');
+}
+
 // ==================== MEDICATION PHASES ====================
 function checkAndUpdatePhase(record) {
   const data = loadData();
@@ -1004,8 +1151,8 @@ function checkAndUpdatePhase(record) {
 }
 
 function addPhase() {
-  const pills = prompt('请输入每天服用粒数（如 3、4、5、6）：');
-  if (!pills || isNaN(parseInt(pills))) return;
+  const pills = prompt('请输入每天服用粒数（0=暂停，如 3、4、5、6）：');
+  if (pills === null || pills === '' || isNaN(parseInt(pills))) return;
   const date = prompt('开始日期（格式：2026-05-04，留空则为今天）：', getTodayStr());
   if (!date) return;
 
@@ -1039,13 +1186,16 @@ function renderPhases() {
 
   container.innerHTML = phases.map((p, i) => {
     const isActive = !p.endDate;
+    const isPaused = p.pills === 0;
     const days = p.days || (p.endDate ? Math.max(1, Math.round((new Date(p.endDate) - new Date(p.startDate)) / 86400000)) : null);
-    return `<div class="phase-item ${isActive ? 'current' : ''}">
+    const reason = p.reason ? `<div style="font-size:11px;color:var(--accent)">原因：${p.reason}</div>` : '';
+    return `<div class="phase-item ${isActive ? 'current' : ''} ${isPaused ? 'paused-phase' : ''}">
       <div class="phase-info">
-        <strong>${p.pills} 粒/天</strong>
+        <strong>${isPaused ? '⏸ 暂停服药' : (p.pills + ' 粒/天')}</strong>
+        ${reason}
         <div style="font-size:12px;color:var(--text-light)">${p.startDate} ${p.endDate ? '→ ' + p.endDate : '→ 至今'}</div>
       </div>
-      <div class="phase-days">${isActive ? '进行中' : (days + ' 天')}</div>
+      <div class="phase-days">${isActive ? (isPaused ? '暂停中' : '进行中') : (days + ' 天')}</div>
     </div>`;
   }).join('');
 }
@@ -1115,7 +1265,7 @@ function renderHistory() {
           detail = `易蒙停 ${r.loperamideDose || 1} 粒`;
           break;
         case 'medication':
-          icon = '💉';
+          icon = '💊';
           detail = `奈拉替尼 ${r.medicationDose || '?'} 粒`;
           break;
         default:
@@ -1208,7 +1358,16 @@ function generateWeeklySummary() {
   let html = '';
 
   // Opening
-  html += `<span>本周你每天早上服用 <span class="highlight">${pills} 粒</span>奈拉替尼。`;
+  const isPaused = activePhase && activePhase.pills === 0;
+  if (isPaused) {
+    const pauseDays = activePhase.startDate ?
+      Math.floor((new Date() - new Date(activePhase.startDate)) / 86400000) + 1 : '?';
+    html += `<span>本周你<strong>暂停</strong>了服药（已停 <span class="warm">${pauseDays} 天</span>`;
+    if (activePhase.reason) html += `，原因：${activePhase.reason}`;
+    html += `）。`;
+  } else {
+    html += `<span>本周你每天早上服用 <span class="highlight">${pills} 粒</span>奈拉替尼。`;
+  }
 
   // Diarrhea
   if (totalDiarrhea === 0) {
