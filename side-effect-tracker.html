@@ -699,10 +699,10 @@ function addRecord(record) {
 
   // Auto-assign diarrhea count: count existing records on the same actual day + 1
   if (record.type === 'diarrhea') {
-    const actualDate = parseDate(record.actualTime || record.createdAt).toDateString();
+    const actualDate = parseDate(record.actualTime || record.createdAt);
     const sameDayCount = data.records.filter(r =>
       r.type === 'diarrhea' &&
-      parseDate(r.actualTime || r.createdAt).toDateString() === actualDate
+      sameLocalDay(r.actualTime || r.createdAt, actualDate)
     ).length;
     record.diarrheaCount = sameDayCount + 1;
   }
@@ -748,6 +748,19 @@ function fmtLocalISO(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
     + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':00';
 }
+// Compare two date-like values by local year/month/day only (timezone-proof)
+function sameLocalDay(a, b) {
+  const da = typeof a === 'string' ? parseDate(a) : a;
+  const db = typeof b === 'string' ? parseDate(b) : b;
+  return da.getFullYear() === db.getFullYear()
+    && da.getMonth() === db.getMonth()
+    && da.getDate() === db.getDate();
+}
+// Extract local date string YYYY-MM-DD from an ISO-like string safely
+function localDateKey(iso) {
+  const d = parseDate(iso);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 
 function fmtTime(iso) { return parseDate(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
 function fmtDate(iso) { return parseDate(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }); }
@@ -779,10 +792,10 @@ function renderHome() {
   });
 
   const data = loadData();
-  const today = new Date().toDateString();
+  const today = new Date();
 
   const todayRecords = data.records.filter(r =>
-    parseDate(r.actualTime || r.createdAt).toDateString() === today
+    sameLocalDay(r.actualTime || r.createdAt, today)
   );
 
   const diarrhea = todayRecords.filter(r => r.type === 'diarrhea').length;
@@ -1179,7 +1192,7 @@ function checkAndUpdatePhase(record) {
   } else if (!activePhase) {
     // No active phase — start one
     phases.push({
-      startDate: (record.actualTime || record.createdAt).slice(0, 10),
+      startDate: localDateKey(record.actualTime || record.createdAt),
       pills: record.medicationDose
     });
     data.phases = phases;
@@ -1371,7 +1384,7 @@ function generateWeeklySummary() {
   let morning = 0, afternoon = 0, evening = 0, night = 0;
 
   records.forEach(r => {
-    const day = (r.actualTime || r.createdAt).slice(0, 10);
+    const day = localDateKey(r.actualTime || r.createdAt);
     if (!daily[day]) return;
     const h = parseDate(r.actualTime || r.createdAt).getHours();
     switch (r.type) {
@@ -1498,7 +1511,7 @@ function renderTrends() {
   days.forEach(d => { daily[d] = { diarrhea: 0, loperamide: 0, pains: [], nausea: 0, fatigue: 0 }; });
 
   records.forEach(r => {
-    const day = (r.actualTime || r.createdAt).slice(0, 10);
+    const day = localDateKey(r.actualTime || r.createdAt);
     if (!daily[day]) return;
     switch (r.type) {
       case 'diarrhea': daily[day].diarrhea++; break;
