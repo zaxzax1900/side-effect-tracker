@@ -770,9 +770,17 @@ function sameLocalDay(a, b) {
 }
 function localDateKey(a) { const d = ts(a); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
-function fmtTime(tsOrStr) { return ts(tsOrStr).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
-function fmtDate(tsOrStr) { return ts(tsOrStr).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }); }
-function fmtFull(tsOrStr) { return ts(tsOrStr).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) + ' ' + fmtTime(tsOrStr); }
+// All date display uses manual local component extraction — no toLocale* which breaks in PWA mode
+const WEEKDAYS_SHORT = ['周日','周一','周二','周三','周四','周五','周六'];
+const WEEKDAYS_LONG = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+
+function fmtTime(tsOrStr) { const d = ts(tsOrStr); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+function fmtDateMD(tsOrStr) { const d = ts(tsOrStr); return (d.getMonth()+1) + '/' + d.getDate(); }
+function fmtDateFull(tsOrStr) { const d = ts(tsOrStr); return d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日 ' + WEEKDAYS_LONG[d.getDay()]; }
+function fmtDateMDW(tsOrStr) { const d = ts(tsOrStr); return (d.getMonth()+1) + '月' + d.getDate() + '日 ' + WEEKDAYS_SHORT[d.getDay()]; }
+function fmtDateMDWLong(tsOrStr) { const d = ts(tsOrStr); return (d.getMonth()+1) + '月' + d.getDate() + '日 ' + WEEKDAYS_LONG[d.getDay()]; }
+function fmtFull(tsOrStr) { return fmtDateMD(tsOrStr) + ' ' + fmtTime(tsOrStr); }
+function fmtFullChinese(tsOrStr) { const d = ts(tsOrStr); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + fmtTime(tsOrStr); }
 function fmtLocalISO(d) { return d.getTime(); }
 
 function getTodayStr() {
@@ -796,9 +804,7 @@ function switchPage(pageName, btn) {
 
 // ==================== HOME PAGE ====================
 function renderHome() {
-  document.getElementById('header-date').textContent = new Date().toLocaleDateString('zh-CN', {
-    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'
-  });
+  document.getElementById('header-date').textContent = fmtDateFull(new Date());
 
   const data = loadData();
   const today = new Date();
@@ -1310,9 +1316,7 @@ function renderHistory() {
   // Group by date
   const groups = {};
   records.forEach(r => {
-    const dateKey = ts(r.actualTime || r.createdAt).toLocaleDateString('zh-CN', {
-      month: 'long', day: 'numeric', weekday: 'short'
-    });
+    const dateKey = fmtDateMDWLong(r.actualTime || r.createdAt);
     if (!groups[dateKey]) groups[dateKey] = [];
     groups[dateKey].push(r);
   });
@@ -1484,8 +1488,8 @@ function generateWeeklySummary() {
   // Worst day
   if (worstDay && worstScore > 0) {
     const wd = worstDay.date;
-    const weekday = wd.toLocaleDateString('zh-CN', { weekday: 'short' });
-    const md = wd.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+    const weekday = WEEKDAYS_SHORT[wd.getDay()];
+    const md = (wd.getMonth()+1) + '/' + wd.getDate();
     html += `<span class="warm"><strong>${weekday}(${md})</strong> 这一天你过得很辛苦</span>`;
     const det = [];
     if (worstDay.diarrhea > 0) det.push(`腹泻 ${worstDay.diarrhea} 次`);
@@ -1646,7 +1650,7 @@ function exportCSV() {
       case 'loperamide': detail = `易蒙停${r.loperamideDose||1}粒`; break;
       case 'medication': detail = `奈拉替尼${r.medicationDose||'?'}粒`; break;
     }
-    csv += `${r.type},${ts(time).toLocaleString('zh-CN')},${detail},${r.isRetrospective?'是':'否'}\n`;
+    csv += `${r.type},${fmtFullChinese(time)},${detail},${r.isRetrospective?'是':'否'}\n`;
   });
   download(csv, '副作用记录.csv', 'text/csv;charset=utf-8');
 }
