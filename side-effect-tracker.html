@@ -748,8 +748,10 @@ function showToast(msg) {
 // Convert old string date to timestamp using explicit local components
 function strToTS(iso) {
   if (!iso) return Date.now();
-  const parts = iso.split(/[-T:.]/);
-  return new Date(+parts[0], (+parts[1]||1)-1, +parts[2]||1, +parts[3]||0, +parts[4]||0, +parts[5]||0).getTime();
+  // Strip Z/timezone suffix and split
+  const cleaned = iso.replace(/[Zz].*$/, '').replace(/[+\-]\d{2}:\d{2}$/, '');
+  const parts = cleaned.split(/[-T:.]/);
+  return new Date(+parts[0], (+parts[1]||1)-1, parseInt(parts[2])||1, +parts[3]||0, +parts[4]||0, +parts[5]||0).getTime();
 }
 // Get a Date object from a timestamp (or string for backward compat)
 function ts(tsOrStr) {
@@ -1041,7 +1043,7 @@ function submitRecord(type) {
     // Stagger times by 2 minutes per record so each is distinguishable
     const t = new Date(actualTime);
     t.setMinutes(t.getMinutes() + i * 2);
-    r.actualTime = t.toISOString();
+    r.actualTime = t.getTime();
     const saved = addRecord(r);
     // Only check medication phase update once (for the first record)
     if (i === 0 && type === 'medication') {
