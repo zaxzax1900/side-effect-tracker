@@ -1,4 +1,4 @@
-const CACHE = 'se-tracker-v1';
+const CACHE = 'se-tracker-v2';
 const ASSETS = ['./', './side-effect-tracker.html'];
 
 self.addEventListener('install', e => {
