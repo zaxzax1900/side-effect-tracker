@@ -684,7 +684,15 @@ function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { records: [], phases: [] };
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    // Migrate old string dates to timestamps
+    let migrated = false;
+    data.records.forEach(r => {
+      if (typeof r.actualTime === 'string') { r.actualTime = strToTS(r.actualTime); migrated = true; }
+      if (typeof r.createdAt === 'string') { r.createdAt = strToTS(r.createdAt); migrated = true; }
+    });
+    if (migrated) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+    return data;
   } catch(e) { return { records: [], phases: [] }; }
 }
 
@@ -699,7 +707,7 @@ function addRecord(record) {
 
   // Auto-assign diarrhea count: count existing records on the same actual day + 1
   if (record.type === 'diarrhea') {
-    const actualDate = parseDate(record.actualTime || record.createdAt);
+    const actualDate = ts(record.actualTime || record.createdAt);
     const sameDayCount = data.records.filter(r =>
       r.type === 'diarrhea' &&
       sameLocalDay(r.actualTime || r.createdAt, actualDate)
@@ -736,35 +744,36 @@ function showToast(msg) {
   t._timeout = setTimeout(() => t.classList.remove('show'), 1800);
 }
 
-// Safe date parser: explicitly treat ISO string components as local time
-// Avoids Safari PWA vs browser differences in date-time parsing
-function parseDate(iso) {
-  if (!iso) return new Date();
+// === TIMESTAMP-BASED DATE UTILS (immune to timezone parsing bugs) ===
+// Convert old string date to timestamp using explicit local components
+function strToTS(iso) {
+  if (!iso) return Date.now();
   const parts = iso.split(/[-T:.]/);
-  return new Date(+parts[0], (+parts[1]||1)-1, +parts[2]||1, +parts[3]||0, +parts[4]||0, +parts[5]||0);
+  return new Date(+parts[0], (+parts[1]||1)-1, +parts[2]||1, +parts[3]||0, +parts[4]||0, +parts[5]||0).getTime();
 }
-// Format a Date as local-time ISO-like string (no timezone, no UTC conversion)
-function fmtLocalISO(d) {
+// Get a Date object from a timestamp (or string for backward compat)
+function ts(tsOrStr) {
+  if (typeof tsOrStr === 'number') return new Date(tsOrStr);
+  if (typeof tsOrStr === 'string') return new Date(strToTS(tsOrStr));
+  return new Date();
+}
+// Format timestamp for datetime-local input
+function tsToInputVal(tsOrD) {
+  const d = typeof tsOrD === 'number' ? new Date(tsOrD) : tsOrD;
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
-    + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':00';
+    + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
-// Compare two date-like values by local year/month/day only (timezone-proof)
+// Compare by local day
 function sameLocalDay(a, b) {
-  const da = typeof a === 'string' ? parseDate(a) : a;
-  const db = typeof b === 'string' ? parseDate(b) : b;
-  return da.getFullYear() === db.getFullYear()
-    && da.getMonth() === db.getMonth()
-    && da.getDate() === db.getDate();
+  const da = ts(a), db = ts(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
-// Extract local date string YYYY-MM-DD from an ISO-like string safely
-function localDateKey(iso) {
-  const d = parseDate(iso);
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
+function localDateKey(a) { const d = ts(a); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
-function fmtTime(iso) { return parseDate(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
-function fmtDate(iso) { return parseDate(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }); }
-function fmtFull(iso) { return parseDate(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) + ' ' + fmtTime(iso); }
+function fmtTime(tsOrStr) { return ts(tsOrStr).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
+function fmtDate(tsOrStr) { return ts(tsOrStr).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }); }
+function fmtFull(tsOrStr) { return ts(tsOrStr).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) + ' ' + fmtTime(tsOrStr); }
+function fmtLocalISO(d) { return d.getTime(); }
 
 function getTodayStr() {
   const d = new Date();
@@ -821,7 +830,7 @@ function renderHome() {
   if (activePhase && activePhase.pills === 0) {
     // Paused state
     const pauseDays = activePhase.startDate ?
-      Math.floor((new Date() - parseDate(activePhase.startDate)) / 86400000) + 1 : '?';
+      Math.floor((new Date() - strToTS(activePhase.startDate)) / 86400000) + 1 : '?';
     document.getElementById('stat-phase').textContent = '暂停';
     document.getElementById('stat-phase-label').textContent = '已停' + pauseDays + '天';
     if (pauseBtn) { pauseBtn.classList.add('paused'); pauseIcon.textContent = '💊'; pauseLabel.textContent = '恢复服药'; }
@@ -839,7 +848,7 @@ function openRecord(type) {
   currentRecordType = type;
   const sheet = document.getElementById('modal-sheet');
   const now = new Date();
-  const nowLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const nowLocal = tsToInputVal(now);
 
   let html = '<button class="close-btn" onclick="closeModal()">✕</button>';
 
@@ -1006,7 +1015,7 @@ function submitRecord(type) {
     const dateVal = document.getElementById('field-retro-date')?.value || getTodayStr();
     if (period === 'exact') {
       const retroTime = document.getElementById('field-retro-time')?.value;
-      actualTime = retroTime ? parseDate(retroTime) : new Date();
+      actualTime = retroTime ? new Date(strToTS(retroTime)) : new Date();
     } else {
       const hour = period === 'morning' ? 9 : period === 'afternoon' ? 14 : 20;
       actualTime = new Date(+dateVal.split('-')[0], +dateVal.split('-')[1]-1, +dateVal.split('-')[2], hour, 0, 0);
@@ -1064,7 +1073,7 @@ function openPauseResume() {
 function openPauseModal() {
   const sheet = document.getElementById('modal-sheet');
   const now = new Date();
-  const nowLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const nowLocal = tsToInputVal(now);
 
   sheet.innerHTML = `
     <button class="close-btn" onclick="closeModal()">✕</button>
@@ -1097,7 +1106,7 @@ function submitPause() {
 
   if (activeIdx >= 0) {
     phases[activeIdx].endDate = dateStr;
-    const days = Math.round((parseDate(dateStr) - parseDate(phases[activeIdx].startDate)) / 86400000);
+    const days = Math.round((strToTS(dateStr) - strToTS(phases[activeIdx].startDate)) / 86400000);
     phases[activeIdx].days = Math.max(1, days);
   }
 
@@ -1116,7 +1125,7 @@ function submitPause() {
 function openResumeModal(phases) {
   const sheet = document.getElementById('modal-sheet');
   const now = new Date();
-  const nowLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const nowLocal = tsToInputVal(now);
 
   // Find previous pill count
   const prevPills = phases.filter(p => p.pills > 0 && p.endDate).slice(-1)[0]?.pills || 3;
@@ -1152,7 +1161,7 @@ function submitResume() {
 
   if (activeIdx >= 0) {
     phases[activeIdx].endDate = dateStr;
-    const days = Math.round((parseDate(dateStr) - parseDate(phases[activeIdx].startDate)) / 86400000);
+    const days = Math.round((strToTS(dateStr) - strToTS(phases[activeIdx].startDate)) / 86400000);
     phases[activeIdx].days = Math.max(1, days);
   }
 
@@ -1176,9 +1185,9 @@ function checkAndUpdatePhase(record) {
 
   if (activePhase && record.medicationDose !== activePhase.pills) {
     // Pill count changed — close current phase and start new one
-    const endD = parseDate(record.actualTime || record.createdAt);
+    const endD = ts(record.actualTime || record.createdAt);
     activePhase.endDate = endD.getFullYear() + '-' + String(endD.getMonth()+1).padStart(2,'0') + '-' + String(endD.getDate()).padStart(2,'0');
-    const days = Math.round((parseDate(activePhase.endDate) - parseDate(activePhase.startDate)) / 86400000) + 1;
+    const days = Math.round((strToTS(activePhase.endDate) - strToTS(activePhase.startDate)) / 86400000) + 1;
     activePhase.days = days;
     showToast(`💊 ${activePhase.pills}粒/天 阶段结束，持续 ${days} 天`);
 
@@ -1234,7 +1243,7 @@ function addPhase() {
   const activePhase = phases.find(p => !p.endDate);
   if (activePhase) {
     activePhase.endDate = date;
-    const days = Math.round((parseDate(date) - parseDate(activePhase.startDate)) / 86400000);
+    const days = Math.round((strToTS(date) - strToTS(activePhase.startDate)) / 86400000);
     activePhase.days = Math.max(1, days);
   }
 
@@ -1258,7 +1267,7 @@ function renderPhases() {
   container.innerHTML = phases.map((p, i) => {
     const isActive = !p.endDate;
     const isPaused = p.pills === 0;
-    const days = p.days || (p.endDate ? Math.max(1, Math.round((parseDate(p.endDate) - parseDate(p.startDate)) / 86400000)) : null);
+    const days = p.days || (p.endDate ? Math.max(1, Math.round((strToTS(p.endDate) - strToTS(p.startDate)) / 86400000)) : null);
     const reason = p.reason ? `<div style="font-size:11px;color:var(--accent)">原因：${p.reason}</div>` : '';
     return `<div class="phase-item ${isActive ? 'current' : ''} ${isPaused ? 'paused-phase' : ''}">
       <div class="phase-info">
@@ -1285,7 +1294,7 @@ function setFilter(filter, btn) {
 function renderHistory() {
   const data = loadData();
   let records = [...data.records].sort((a, b) =>
-    parseDate(b.actualTime || b.createdAt) - parseDate(a.actualTime || a.createdAt)
+    (b.actualTime || b.createdAt) - (a.actualTime || a.createdAt)
   );
 
   if (currentFilter !== 'all') {
@@ -1301,7 +1310,7 @@ function renderHistory() {
   // Group by date
   const groups = {};
   records.forEach(r => {
-    const dateKey = parseDate(r.actualTime || r.createdAt).toLocaleDateString('zh-CN', {
+    const dateKey = ts(r.actualTime || r.createdAt).toLocaleDateString('zh-CN', {
       month: 'long', day: 'numeric', weekday: 'short'
     });
     if (!groups[dateKey]) groups[dateKey] = [];
@@ -1386,7 +1395,7 @@ function generateWeeklySummary() {
   records.forEach(r => {
     const day = localDateKey(r.actualTime || r.createdAt);
     if (!daily[day]) return;
-    const h = parseDate(r.actualTime || r.createdAt).getHours();
+    const h = ts(r.actualTime || r.createdAt).getHours();
     switch (r.type) {
       case 'diarrhea':
         daily[day].diarrhea++;
@@ -1435,7 +1444,7 @@ function generateWeeklySummary() {
   const isPaused = activePhase && activePhase.pills === 0;
   if (isPaused) {
     const pauseDays = activePhase.startDate ?
-      Math.floor((new Date() - parseDate(activePhase.startDate)) / 86400000) + 1 : '?';
+      Math.floor((new Date() - strToTS(activePhase.startDate)) / 86400000) + 1 : '?';
     html += `<span>本周你<strong>暂停</strong>了服药（已停 <span class="warm">${pauseDays} 天</span>`;
     if (activePhase.reason) html += `，原因：${activePhase.reason}`;
     html += `）。`;
@@ -1637,7 +1646,7 @@ function exportCSV() {
       case 'loperamide': detail = `易蒙停${r.loperamideDose||1}粒`; break;
       case 'medication': detail = `奈拉替尼${r.medicationDose||'?'}粒`; break;
     }
-    csv += `${r.type},${parseDate(time).toLocaleString('zh-CN')},${detail},${r.isRetrospective?'是':'否'}\n`;
+    csv += `${r.type},${ts(time).toLocaleString('zh-CN')},${detail},${r.isRetrospective?'是':'否'}\n`;
   });
   download(csv, '副作用记录.csv', 'text/csv;charset=utf-8');
 }
@@ -1711,6 +1720,7 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+// v3 — timestamp-based dates
 </script>
 </body>
 </html>
